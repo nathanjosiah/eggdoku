@@ -70,6 +70,7 @@ const sizePicker = $('size-picker');
 const sizeSelect = $<HTMLSelectElement>('size-select');
 const autoXToggle = $<HTMLInputElement>('autox-toggle');
 const livesEl = $('lives');
+const foundEl = $('found');
 const helpDialog = $<HTMLDialogElement>('help-dialog');
 const winDialog = $<HTMLDialogElement>('win-dialog');
 const loseDialog = $<HTMLDialogElement>('lose-dialog');
@@ -186,6 +187,7 @@ interface Game {
 
 let game: Game | null = null;
 const isOver = () => !!game && (game.solved || game.lost);
+let foundEls: HTMLElement[] = [];
 let cellEls: HTMLDivElement[] = [];
 
 function todayId(): string {
@@ -393,10 +395,39 @@ function buildBoard() {
       cellEls.push(el);
     }
   }
+  buildFound(palette);
   boardEl.classList.remove('entering');
   void boardEl.offsetWidth;
   boardEl.classList.add('entering');
   setTimeout(() => boardEl.classList.remove('entering'), 1200);
+}
+
+/** One dot per region, in board reading order, that fills with an eggplant once found. */
+function buildFound(palette: number[]) {
+  const { regions } = game!.puzzle;
+  const order = [...new Set(regions)];
+  foundEls = [];
+  foundEl.replaceChildren(
+    ...order.map((reg, k) => {
+      const dot = document.createElement('span');
+      dot.className = 'found-dot';
+      dot.style.setProperty('--rc', `var(--r${palette[reg]})`);
+      dot.style.setProperty('--d', `${k * 0.05}s`);
+      dot.innerHTML = '<svg class="egg"><use href="#eggplant"/></svg>';
+      foundEls[reg] = dot;
+      return dot;
+    }),
+  );
+}
+
+function renderFound() {
+  const { regions } = game!.puzzle;
+  const found = new Set<number>();
+  // Wrong eggplants are turned back into marks, so every eggplant on the board is a real find.
+  game!.cells.forEach((state, i) => state === EGG && found.add(regions[i]));
+  foundEls.forEach((dot, reg) => dot.classList.toggle('is-found', found.has(reg)));
+  foundEl.classList.toggle('won', game!.solved);
+  foundEl.setAttribute('aria-label', `${found.size} of ${foundEls.length} eggplants found`);
 }
 
 function render() {
@@ -416,6 +447,7 @@ function render() {
     boardEl.classList.add('won');
   }
   boardEl.classList.toggle('lost', g.lost);
+  renderFound();
   updateChrome();
 }
 
