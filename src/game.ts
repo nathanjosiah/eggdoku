@@ -5,12 +5,16 @@ import type { Puzzle } from './puzzle';
 export const EMPTY = 0;
 export const MARK = 1;
 export const EGG = 2;
-export type CellState = typeof EMPTY | typeof MARK | typeof EGG;
+/** A penciled-in guess. It obeys the rules like an eggplant but is never judged. */
+export const PEACH = 3;
+export type CellState = typeof EMPTY | typeof MARK | typeof EGG | typeof PEACH;
+
+const isPlaced = (s: CellState) => s === EGG || s === PEACH;
 
 export interface Conflicts {
   /** Cells inside a row/column/region that breaks a rule (drawn striped). */
   cells: Set<number>;
-  /** Eggplants that are directly part of a rule violation (they shake). */
+  /** Eggplants and peaches that are directly part of a rule violation (they shake). */
   eggs: Set<number>;
 }
 
@@ -33,7 +37,7 @@ export function findConflicts(p: Puzzle, cells: CellState[]): Conflicts {
   groups.push(...byRegion);
 
   for (const group of groups) {
-    const eggs = group.filter((i) => cells[i] === EGG);
+    const eggs = group.filter((i) => isPlaced(cells[i]));
     const allMarked = group.every((i) => cells[i] === MARK);
     if (eggs.length > 1 || allMarked) {
       group.forEach((i) => out.cells.add(i));
@@ -42,9 +46,9 @@ export function findConflicts(p: Puzzle, cells: CellState[]): Conflicts {
   }
 
   for (let i = 0; i < cells.length; i++) {
-    if (cells[i] !== EGG) continue;
+    if (!isPlaced(cells[i])) continue;
     for (const n of neighbors(size, i)) {
-      if (cells[n] === EGG) {
+      if (isPlaced(cells[n])) {
         out.eggs.add(i);
         out.eggs.add(n);
       }

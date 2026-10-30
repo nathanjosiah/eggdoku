@@ -8,6 +8,7 @@ import {
   isSolved,
   MARK,
   MAX_LIVES,
+  PEACH,
   scoreFor,
   type CellState,
   type Score,
@@ -390,7 +391,8 @@ function buildBoard() {
       if (c < size - 1 && regions[i + 1] !== reg) el.classList.add('br');
       el.innerHTML =
         '<div class="mark"><svg><use href="#mark"/></svg></div>' +
-        '<div class="egg-wrap"><svg class="egg"><use href="#eggplant"/></svg></div>';
+        '<div class="egg-wrap"><svg class="egg"><use href="#eggplant"/></svg></div>' +
+        '<div class="peach-wrap"><svg class="peach"><use href="#peach"/></svg></div>';
       boardEl.appendChild(el);
       cellEls.push(el);
     }
@@ -438,6 +440,7 @@ function render() {
     const flashing = wrongFlash.has(i);
     el.classList.toggle('is-mark', state === MARK && !flashing);
     el.classList.toggle('is-egg', state === EGG || flashing);
+    el.classList.toggle('is-peach', state === PEACH && !flashing);
     el.classList.toggle('wrong', flashing);
     el.classList.toggle('bad', conflicts.cells.has(i));
     el.classList.toggle('egg-bad', conflicts.eggs.has(i));
@@ -568,6 +571,21 @@ function tap(i: number) {
   commit(before);
 }
 
+const HOLD_MS = 450;
+
+/** Tap-and-hold pencils a peach in (or out) without judging it. */
+function hold(i: number) {
+  const g = game!;
+  if (g.cells[i] === EGG) return;
+  const before = [...g.cells];
+  g.cells[i] = g.cells[i] === PEACH ? EMPTY : PEACH;
+  lastTap = null;
+  try {
+    navigator.vibrate?.(12);
+  } catch {}
+  commit(before);
+}
+
 type DragMode = 'mark' | 'clear';
 
 function dragApply(i: number, mode: DragMode) {
@@ -582,6 +600,8 @@ let drag: {
   last: number;
   mode: DragMode | null;
   before: CellState[];
+  holdTimer: number;
+  held: boolean;
 } | null = null;
 
 function cellAt(e: PointerEvent): number {
@@ -616,14 +636,21 @@ boardEl.addEventListener('pointerdown', (e) => {
   if (i < 0) return;
   e.preventDefault();
   boardEl.setPointerCapture(e.pointerId);
-  drag = { pointerId: e.pointerId, start: i, last: i, mode: null, before: [...game.cells] };
+  drag = { pointerId: e.pointerId, start: i, last: i, mode: null, before: [...game.cells], holdTimer: 0, held: false };
+  const d = drag;
+  d.holdTimer = window.setTimeout(() => {
+    if (drag !== d || d.mode) return;
+    d.held = true;
+    hold(i);
+  }, HOLD_MS);
 });
 
 boardEl.addEventListener('pointermove', (e) => {
   if (!drag || e.pointerId !== drag.pointerId) return;
   const i = cellAt(e);
-  if (i < 0 || i === drag.last) return;
+  if (i < 0 || i === drag.last || drag.held) return;
   if (!drag.mode) {
+    clearTimeout(drag.holdTimer);
     // First move into another cell turns the gesture into a drag.
     drag.mode = game!.cells[drag.start] === MARK ? 'clear' : 'mark';
     dragApply(drag.start, drag.mode);
@@ -637,6 +664,8 @@ function endDrag(e: PointerEvent) {
   if (!drag || e.pointerId !== drag.pointerId) return;
   const d = drag;
   drag = null;
+  clearTimeout(d.holdTimer);
+  if (d.held) return;
   if (d.mode) {
     lastTap = null;
     commit(d.before);
